@@ -1,0 +1,1370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Work-Aware Infant Sleep Optimizer</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/alpinejs@3.13.3/dist/cdn.min.js" defer></script>
+<script src="https://unpkg.com/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        primary: '#6366f1',
+        primaryDark: '#4f46e5',
+        secondary: '#a78bfa',
+        accent: '#f59e0b',
+        soft: '#eef2ff',
+        softPink: '#fdf2f8',
+        softBlue: '#eff6ff',
+        darkBg: '#1e1b4b',
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+      }
+    }
+  }
+}
+</script>
+<style>
+* { -webkit-tap-highlight-color: transparent; }
+body { font-family: 'Inter', system-ui, sans-serif; }
+.tab-active { border-bottom: 3px solid #6366f1; color: #6366f1; font-weight: 600; }
+.tab-inactive { border-bottom: 3px solid transparent; color: #6b7280; }
+.slide-in { animation: slideIn 0.3s ease-out; }
+@keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.pulse-glow { animation: pulseGlow 2s infinite; }
+@keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.3); } 50% { box-shadow: 0 0 0 12px rgba(99,102,241,0); } }
+.fade-in { animation: fadeIn 0.4s ease-out; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+input[type="time"], input[type="date"], input[type="number"], select {
+  min-height: 48px;
+  font-size: 16px;
+}
+.touch-target { min-height: 48px; min-width: 48px; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c7d2fe; border-radius: 4px; }
+.modal-overlay { background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen" x-data="app()" x-init="init()">
+
+<!-- Loading Screen -->
+<div x-show="loading" x-transition class="fixed inset-0 bg-white z-50 flex items-center justify-center">
+  <div class="text-center">
+    <div class="text-6xl mb-4">🌙</div>
+    <h1 class="text-2xl font-bold text-primary mb-2">Sleep Optimizer</h1>
+    <p class="text-gray-400 text-sm">Loading your family's sleep plan...</p>
+    <div class="mt-4 w-48 h-1.5 bg-gray-200 rounded-full mx-auto overflow-hidden">
+      <div class="h-full bg-primary rounded-full animate-pulse" style="width:60%"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Onboarding -->
+<div x-show="!onboarded && !loading" x-transition class="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+  <div class="max-w-md mx-auto px-4 py-8">
+    
+    <!-- Step Indicator -->
+    <div class="flex items-center justify-center gap-2 mb-8">
+      <template x-for="i in 4">
+        <div class="h-2 rounded-full transition-all duration-300"
+             :class="onboardStep >= i ? 'bg-primary w-8' : 'bg-gray-200 w-4'"></div>
+      </template>
+    </div>
+
+    <!-- Step 1: Welcome -->
+    <div x-show="onboardStep === 1" class="slide-in">
+      <div class="text-center mb-8">
+        <div class="text-7xl mb-4">👶🌙</div>
+        <h1 class="text-3xl font-bold text-gray-900 mb-3">Work-Aware<br>Sleep Optimizer</h1>
+        <p class="text-gray-500 text-lg leading-relaxed">Better sleep for baby <em>and</em> working parents. We'll build a plan around your real schedule.</p>
+      </div>
+      <div class="space-y-3 mb-8">
+        <div class="flex items-center gap-3 bg-white rounded-xl p-4 shadow-sm">
+          <span class="text-2xl">📅</span>
+          <span class="text-sm text-gray-600">Adapts to your work shifts & commute</span>
+        </div>
+        <div class="flex items-center gap-3 bg-white rounded-xl p-4 shadow-sm">
+          <span class="text-2xl">🔮</span>
+          <span class="text-sm text-gray-600">Predicts sleep regressions before they hit</span>
+        </div>
+        <div class="flex items-center gap-3 bg-white rounded-xl p-4 shadow-sm">
+          <span class="text-2xl">🤝</span>
+          <span class="text-sm text-gray-600">Caregiver handoff coordination</span>
+        </div>
+      </div>
+      <button @click="onboardStep = 2" class="w-full bg-primary text-white font-semibold py-4 rounded-2xl text-lg touch-target hover:bg-primaryDark transition">
+        Let's Get Started →
+      </button>
+    </div>
+
+    <!-- Step 2: Baby Info -->
+    <div x-show="onboardStep === 2" class="slide-in">
+      <h2 class="text-2xl font-bold text-gray-900 mb-2">👶 About Your Baby</h2>
+      <p class="text-gray-500 mb-6">This helps us create age-appropriate sleep plans.</p>
+      
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Baby's Name</label>
+          <input x-model="profile.babyName" type="text" placeholder="e.g., Luna" 
+                 class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+          <input x-model="profile.babyDob" type="date" 
+                 class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Current Sleep Challenge</label>
+          <select x-model="profile.sleepChallenge" 
+                  class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none bg-white">
+            <option value="">Select one...</option>
+            <option value="short_naps">Short naps (under 45 min)</option>
+            <option value="night_waking">Frequent night wakings</option>
+            <option value="bedtime_resistance">Bedtime resistance</option>
+            <option value="early_waking">Early morning waking</option>
+            <option value="schedule_chaos">No consistent schedule</option>
+            <option value="regression">Going through a regression</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="flex gap-3 mt-8">
+        <button @click="onboardStep = 1" class="px-6 py-4 rounded-2xl border border-gray-200 text-gray-500 touch-target">Back</button>
+        <button @click="onboardStep = 3" :disabled="!profile.babyName || !profile.babyDob"
+                class="flex-1 bg-primary text-white font-semibold py-4 rounded-2xl touch-target hover:bg-primaryDark transition disabled:opacity-40">
+          Next →
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 3: Caregiver 1 Schedule -->
+    <div x-show="onboardStep === 3" class="slide-in">
+      <h2 class="text-2xl font-bold text-gray-900 mb-2">💼 Your Work Schedule</h2>
+      <p class="text-gray-500 mb-6">We'll optimize nap windows and handoffs around this.</p>
+      
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Your Name</label>
+          <input x-model="profile.caregiver1Name" type="text" placeholder="e.g., Alex"
+                 class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Work Pattern</label>
+          <select x-model="profile.caregiver1Pattern"
+                  class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none bg-white">
+            <option value="">Select...</option>
+            <option value="9to5">Standard 9-5</option>
+            <option value="early_shift">Early Shift (5am-2pm)</option>
+            <option value="late_shift">Late Shift (2pm-11pm)</option>
+            <option value="night_shift">Night Shift (11pm-7am)</option>
+            <option value="remote">Remote/Hybrid</option>
+            <option value="flexible">Flexible Hours</option>
+            <option value="parental_leave">On Parental Leave</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Leave Home</label>
+            <input x-model="profile.caregiver1Leave" type="time" 
+                   class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Return Home</label>
+            <input x-model="profile.caregiver1Return" type="time"
+                   class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none">
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Commute Time (minutes one-way)</label>
+          <input x-model.number="profile.caregiver1Commute" type="number" placeholder="30" min="0" max="180"
+                 class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none">
+        </div>
+        
+        <div class="bg-softPink rounded-xl p-4">
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input x-model="profile.hasPartner" type="checkbox" class="w-5 h-5 rounded text-primary">
+            <span class="text-sm text-gray-700">I have a co-parent / partner helping</span>
+          </label>
+        </div>
+
+        <div x-show="profile.hasPartner" class="space-y-4 border-l-4 border-secondary pl-4" x-transition>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Partner's Name</label>
+            <input x-model="profile.caregiver2Name" type="text" placeholder="e.g., Jordan"
+                   class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Partner's Work Pattern</label>
+            <select x-model="profile.caregiver2Pattern"
+                    class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none bg-white">
+              <option value="">Select...</option>
+              <option value="9to5">Standard 9-5</option>
+              <option value="early_shift">Early Shift (5am-2pm)</option>
+              <option value="late_shift">Late Shift (2pm-11pm)</option>
+              <option value="night_shift">Night Shift (11pm-7am)</option>
+              <option value="remote">Remote/Hybrid</option>
+              <option value="flexible">Flexible Hours</option>
+              <option value="parental_leave">On Parental Leave</option>
+            </select>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Leave Home</label>
+              <input x-model="profile.caregiver2Leave" type="time"
+                     class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Return Home</label>
+              <input x-model="profile.caregiver2Return" type="time"
+                     class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none">
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="flex gap-3 mt-8">
+        <button @click="onboardStep = 2" class="px-6 py-4 rounded-2xl border border-gray-200 text-gray-500 touch-target">Back</button>
+        <button @click="onboardStep = 4" :disabled="!profile.caregiver1Name || !profile.caregiver1Pattern"
+                class="flex-1 bg-primary text-white font-semibold py-4 rounded-2xl touch-target hover:bg-primaryDark transition disabled:opacity-40">
+          Next →
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 4: Generate Plan -->
+    <div x-show="onboardStep === 4" class="slide-in">
+      <div class="text-center mb-6">
+        <div class="text-6xl mb-4">✨</div>
+        <h2 class="text-2xl font-bold text-gray-900 mb-2">Ready to Optimize!</h2>
+        <p class="text-gray-500">We'll create a personalized sleep plan for <span class="font-semibold text-primary" x-text="profile.babyName"></span> that works with your schedule.</p>
+      </div>
+      
+      <div class="bg-white rounded-2xl p-5 shadow-sm mb-6 space-y-3">
+        <div class="flex justify-between items-center">
+          <span class="text-sm text-gray-500">Baby</span>
+          <span class="text-sm font-medium" x-text="profile.babyName + ' (' + getBabyAge() + ')'"></span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-sm text-gray-500">Challenge</span>
+          <span class="text-sm font-medium" x-text="formatChallenge(profile.sleepChallenge)"></span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-sm text-gray-500">Caregiver 1</span>
+          <span class="text-sm font-medium" x-text="profile.caregiver1Name + ' - ' + formatPattern(profile.caregiver1Pattern)"></span>
+        </div>
+        <div x-show="profile.hasPartner" class="flex justify-between items-center">
+          <span class="text-sm text-gray-500">Caregiver 2</span>
+          <span class="text-sm font-medium" x-text="(profile.caregiver2Name || 'Partner') + ' - ' + formatPattern(profile.caregiver2Pattern)"></span>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <button @click="onboardStep = 3" class="px-6 py-4 rounded-2xl border border-gray-200 text-gray-500 touch-target">Back</button>
+        <button @click="completeOnboarding()" :disabled="generating"
+                class="flex-1 bg-primary text-white font-semibold py-4 rounded-2xl touch-target hover:bg-primaryDark transition disabled:opacity-60 pulse-glow">
+          <span x-show="!generating">🌙 Generate My Plan</span>
+          <span x-show="generating" class="flex items-center justify-center gap-2">
+            <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            Building plan...
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main App -->
+<div x-show="onboarded && !loading" class="min-h-screen pb-24">
+  
+  <!-- Header -->
+  <header class="bg-white shadow-sm sticky top-0 z-40">
+    <div class="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+      <div>
+        <h1 class="text-lg font-bold text-gray-900">🌙 Sleep Optimizer</h1>
+        <p class="text-xs text-gray-400" x-text="profile.babyName + ' • ' + getBabyAge()"></p>
+      </div>
+      <button @click="showSettings = true" class="w-10 h-10 rounded-full bg-soft flex items-center justify-center touch-target">
+        <span class="text-lg">⚙️</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Tab Navigation -->
+  <nav class="bg-white border-b sticky top-[60px] z-30">
+    <div class="max-w-lg mx-auto flex">
+      <button @click="activeTab = 'today'" class="flex-1 py-3 text-sm text-center transition-all touch-target"
+              :class="activeTab === 'today' ? 'tab-active' : 'tab-inactive'">📅 Today</button>
+      <button @click="activeTab = 'log'" class="flex-1 py-3 text-sm text-center transition-all touch-target"
+              :class="activeTab === 'log' ? 'tab-active' : 'tab-inactive'">📝 Log</button>
+      <button @click="activeTab = 'handoffs'" class="flex-1 py-3 text-sm text-center transition-all touch-target"
+              :class="activeTab === 'handoffs' ? 'tab-active' : 'tab-inactive'">🤝 Handoffs</button>
+      <button @click="activeTab = 'insights'" class="flex-1 py-3 text-sm text-center transition-all touch-target"
+              :class="activeTab === 'insights' ? 'tab-active' : 'tab-inactive'">📊 Insights</button>
+    </div>
+  </nav>
+
+  <!-- Today Tab -->
+  <div x-show="activeTab === 'today'" class="max-w-lg mx-auto px-4 py-4 space-y-4 fade-in">
+    
+    <!-- Alert Banner -->
+    <div x-show="sleepPlan.regressionAlert" class="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3">
+      <span class="text-2xl">⚠️</span>
+      <div>
+        <p class="text-sm font-semibold text-amber-800" x-text="sleepPlan.regressionAlert?.title || 'Possible Regression Ahead'"></p>
+        <p class="text-xs text-amber-600 mt-1" x-text="sleepPlan.regressionAlert?.message || ''"></p>
+      </div>
+    </div>
+
+    <!-- Current Status Card -->
+    <div class="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-5 text-white shadow-lg">
+      <div class="flex justify-between items-start mb-4">
+        <div>
+          <p class="text-sm opacity-80">Current Status</p>
+          <p class="text-xl font-bold mt-1" x-text="getCurrentStatus()"></p>
+        </div>
+        <span class="text-4xl" x-text="getCurrentStatusEmoji()"></span>
+      </div>
+      <div class="bg-white/20 rounded-xl p-3 mt-3">
+        <p class="text-sm font-medium" x-text="getNextAction()"></p>
+        <p class="text-xs opacity-80 mt-1" x-text="getNextActionDetail()"></p>
+      </div>
+    </div>
+
+    <!-- Today's Schedule -->
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-50">
+        <h3 class="font-semibold text-gray-900">Today's Sleep Windows</h3>
+        <p class="text-xs text-gray-400 mt-0.5">Optimized for your work schedules</p>
+      </div>
+      <div class="divide-y divide-gray-50">
+        <template x-for="(window, idx) in sleepPlan.todayWindows" :key="idx">
+          <div class="px-5 py-3 flex items-center gap-4">
+            <div class="w-10 h-10 rounded-full flex items-center justify-center text-lg"
+                 :class="window.type === 'nap' ? 'bg-blue-50' : window.type === 'bedtime' ? 'bg-indigo-50' : 'bg-amber-50'">
+              <span x-text="window.type === 'nap' ? '😴' : window.type === 'bedtime' ? '🌙' : '☀️'"></span>
+            </div>
+            <div class="flex-1">
+              <p class="text-sm font-medium text-gray-900" x-text="window.label"></p>
+              <p class="text-xs text-gray-400" x-text="window.time"></p>
+            </div>
+            <div class="text-right">
+              <p class="text-xs font-medium" :class="window.caregiver === profile.caregiver1Name ? 'text-primary' : 'text-secondary'" x-text="window.caregiver"></p>
+              <p class="text-xs text-gray-400" x-text="window.duration"></p>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Quick Tips -->
+    <div class="bg-softBlue rounded-2xl p-5">
+      <h3 class="font-semibold text-gray-900 mb-3">💡 Shift-Smart Tips</h3>
+      <div class="space-y-2">
+        <template x-for="(tip, idx) in sleepPlan.tips" :key="idx">
+          <p class="text-sm text-gray-600 flex gap-2">
+            <span class="text-primary">•</span>
+            <span x-text="tip"></span>
+          </p>
+        </template>
+      </div>
+    </div>
+
+    <!-- Confidence Score -->
+    <div class="bg-white rounded-2xl shadow-sm p-5">
+      <div class="flex justify-between items-center mb-2">
+        <span class="text-sm font-medium text-gray-700">Plan Confidence</span>
+        <span class="text-sm font-bold text-primary" x-text="sleepPlan.confidence + '%'"></span>
+      </div>
+      <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div class="h-full bg-gradient-to-r from-primary to-secondary rounded-full transition-all duration-1000" :style="'width:' + sleepPlan.confidence + '%'"></div>
+      </div>
+      <p class="text-xs text-gray-400 mt-2" x-text="'Based on ' + (logs.length || 0) + ' logged events. More data = better predictions!'"></p>
+    </div>
+
+    <!-- Regenerate button -->
+    <button @click="regeneratePlan()" :disabled="generating"
+            class="w-full py-3 rounded-2xl border-2 border-dashed border-primary/30 text-primary text-sm font-medium touch-target hover:bg-primary/5 transition flex items-center justify-center gap-2">
+      <span x-show="!generating">🔄 Refresh Today's Plan</span>
+      <span x-show="generating" class="flex items-center gap-2">
+        <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        Regenerating...
+      </span>
+    </button>
+  </div>
+
+  <!-- Log Tab -->
+  <div x-show="activeTab === 'log'" class="max-w-lg mx-auto px-4 py-4 space-y-4 fade-in">
+    
+    <!-- Quick Log Buttons -->
+    <div class="bg-white rounded-2xl shadow-sm p-5">
+      <h3 class="font-semibold text-gray-900 mb-4">⚡ Quick Log</h3>
+      <div class="grid grid-cols-2 gap-3">
+        <button @click="showLogModal('sleep_start')" class="bg-indigo-50 hover:bg-indigo-100 rounded-xl p-4 text-center transition touch-target">
+          <span class="text-2xl block mb-1">😴</span>
+          <span class="text-xs font-medium text-gray-700">Fell Asleep</span>
+        </button>
+        <button @click="showLogModal('sleep_end')" class="bg-amber-50 hover:bg-amber-100 rounded-xl p-4 text-center transition touch-target">
+          <span class="text-2xl block mb-1">☀️</span>
+          <span class="text-xs font-medium text-gray-700">Woke Up</span>
+        </button>
+        <button @click="showLogModal('feed')" class="bg-green-50 hover:bg-green-100 rounded-xl p-4 text-center transition touch-target">
+          <span class="text-2xl block mb-1">🍼</span>
+          <span class="text-xs font-medium text-gray-700">Fed Baby</span>
+        </button>
+        <button @click="showLogModal('diaper')" class="bg-pink-50 hover:bg-pink-100 rounded-xl p-4 text-center transition touch-target">
+          <span class="text-2xl block mb-1">👶</span>
+          <span class="text-xs font-medium text-gray-700">Diaper Change</span>
+        </button>
+        <button @click="showLogModal('fussy')" class="bg-red-50 hover:bg-red-100 rounded-xl p-4 text-center transition touch-target">
+          <span class="text-2xl block mb-1">😢</span>
+          <span class="text-xs font-medium text-gray-700">Fussy/Crying</span>
+        </button>
+        <button @click="showLogModal('note')" class="bg-gray-50 hover:bg-gray-100 rounded-xl p-4 text-center transition touch-target">
+          <span class="text-2xl block mb-1">📝</span>
+          <span class="text-xs font-medium text-gray-700">Custom Note</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Environment -->
+    <div class="bg-white rounded-2xl shadow-sm p-5">
+      <h3 class="font-semibold text-gray-900 mb-4">🌡️ Environment Check</h3>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Room Temp (°F)</label>
+          <input x-model.number="envData.temp" type="number" placeholder="70" min="55" max="90"
+                 class="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:border-primary outline-none">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Darkness Level</label>
+          <select x-model="envData.darkness"
+                  class="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:border-primary outline-none bg-white">
+            <option value="dark">Very Dark 🌑</option>
+            <option value="dim">Dim 🌒</option>
+            <option value="light">Some Light 🌓</option>
+            <option value="bright">Bright 🌕</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Noise Level</label>
+          <select x-model="envData.noise"
+                  class="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:border-primary outline-none bg-white">
+            <option value="quiet">Quiet 🤫</option>
+            <option value="white_noise">White Noise 🔊</option>
+            <option value="moderate">Moderate 🔉</option>
+            <option value="noisy">Noisy 📢</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Swaddled?</label>
+          <select x-model="envData.swaddle"
+                  class="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:border-primary outline-none bg-white">
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+            <option value="sleep_sack">Sleep Sack</option>
+          </select>
+        </div>
+      </div>
+      <button @click="saveEnvironment()" class="w-full mt-4 bg-soft text-primary font-medium py-2.5 rounded-xl text-sm touch-target">
+        Save Environment ✓
+      </button>
+    </div>
+
+    <!-- Recent Logs -->
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-50 flex justify-between items-center">
+        <h3 class="font-semibold text-gray-900">Recent Activity</h3>
+        <span class="text-xs text-gray-400" x-text="logs.length + ' entries'"></span>
+      </div>
+      <div x-show="logs.length === 0" class="px-5 py-8 text-center">
+        <p class="text-gray-400 text-sm">No logs yet. Start tracking! 📝</p>
+      </div>
+      <div class="divide-y divide-gray-50 max-h-96 overflow-y-auto">
+        <template x-for="(log, idx) in recentLogs()" :key="idx">
+          <div class="px-5 py-3 flex items-center gap-3">
+            <span class="text-xl" x-text="getLogEmoji(log.type)"></span>
+            <div class="flex-1">
+              <p class="text-sm font-medium text-gray-900" x-text="getLogLabel(log.type)"></p>
+              <p class="text-xs text-gray-400" x-text="log.note || ''"></p>
+            </div>
+            <div class="text-right">
+              <p class="text-xs text-gray-500" x-text="formatLogTime(log.timestamp)"></p>
+              <p class="text-xs text-gray-400" x-text="log.caregiver || ''"></p>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- Handoffs Tab -->
+  <div x-show="activeTab === 'handoffs'" class="max-w-lg mx-auto px-4 py-4 space-y-4 fade-in">
+    
+    <div x-show="!profile.hasPartner" class="text-center py-12">
+      <div class="text-5xl mb-4">👤</div>
+      <h3 class="text-lg font-semibold text-gray-700 mb-2">Solo Caregiver Mode</h3>
+      <p class="text-sm text-gray-400 mb-4">Add a partner in settings to enable handoff coordination.</p>
+      <button @click="showSettings = true" class="bg-primary text-white px-6 py-3 rounded-xl text-sm font-medium touch-target">
+        Add Partner →
+      </button>
+    </div>
+
+    <div x-show="profile.hasPartner" class="space-y-4">
+      <!-- Active Caregiver -->
+      <div class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-5 border border-green-100">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-12 h-12 rounded-full bg-green-200 flex items-center justify-center text-xl">🟢</div>
+          <div>
+            <p class="text-sm text-gray-500">Currently On Duty</p>
+            <p class="text-lg font-bold text-gray-900" x-text="sleepPlan.currentCaregiver || profile.caregiver1Name"></p>
+          </div>
+        </div>
+        <p class="text-sm text-gray-600" x-text="sleepPlan.handoffMessage || 'Handoff information will appear here.'"></p>
+      </div>
+
+      <!-- Handoff Timeline -->
+      <div class="bg-white rounded-2xl shadow-sm p-5">
+        <h3 class="font-semibold text-gray-900 mb-4">🔄 Today's Handoff Schedule</h3>
+        <div class="space-y-4">
+          <template x-for="(handoff, idx) in sleepPlan.handoffs" :key="idx">
+            <div class="flex gap-3 items-start">
+              <div class="flex flex-col items-center">
+                <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm"
+                     :class="handoff.done ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'">
+                  <span x-text="handoff.done ? '✓' : (idx+1)"></span>
+                </div>
+                <div x-show="idx < sleepPlan.handoffs.length - 1" class="w-0.5 h-8 bg-gray-200 mt-1"></div>
+              </div>
+              <div class="flex-1 pb-2">
+                <div class="flex justify-between items-start">
+                  <div>
+                    <p class="text-sm font-medium text-gray-900" x-text="handoff.label"></p>
+                    <p class="text-xs text-gray-400" x-text="handoff.from + ' → ' + handoff.to"></p>
+                  </div>
+                  <span class="text-xs font-medium bg-soft text-primary px-2 py-1 rounded-full" x-text="handoff.time"></span>
+                </div>
+                <p x-show="handoff.checklist" class="text-xs text-gray-500 mt-1" x-text="handoff.checklist"></p>
+              </div>
+            </div>
+          </template>
+          <div x-show="!sleepPlan.handoffs || sleepPlan.handoffs.length === 0" class="text-center py-4">
+            <p class="text-sm text-gray-400">No handoffs scheduled yet</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Handoff Checklist -->
+      <div class="bg-white rounded-2xl shadow-sm p-5">
+        <h3 class="font-semibold text-gray-900 mb-3">✅ Handoff Checklist</h3>
+        <div class="space-y-3">
+          <template x-for="(item, idx) in handoffChecklist" :key="idx">
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" x-model="item.done" @change="saveData()" class="w-5 h-5 rounded text-primary">
+              <span class="text-sm" :class="item.done ? 'text-gray-400 line-through' : 'text-gray-700'" x-text="item.text"></span>
+            </label>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Insights Tab -->
+  <div x-show="activeTab === 'insights'" class="max-w-lg mx-auto px-4 py-4 space-y-4 fade-in">
+    
+    <!-- Sleep Summary -->
+    <div class="bg-white rounded-2xl shadow-sm p-5">
+      <h3 class="font-semibold text-gray-900 mb-4">📊 Sleep Summary (7 days)</h3>
+      <div class="grid grid-cols-3 gap-3 text-center">
+        <div class="bg-indigo-50 rounded-xl p-3">
+          <p class="text-xl font-bold text-primary" x-text="sleepStats.avgNightHours + 'h'"></p>
+          <p class="text-xs text-gray-500">Night Sleep</p>
+        </div>
+        <div class="bg-blue-50 rounded-xl p-3">
+          <p class="text-xl font-bold text-blue-600" x-text="sleepStats.avgNapHours + 'h'"></p>
+          <p class="text-xs text-gray-500">Day Naps</p>
+        </div>
+        <div class="bg-amber-50 rounded-xl p-3">
+          <p class="text-xl font-bold text-amber-600" x-text="sleepStats.avgWakings"></p>
+          <p class="text-xs text-gray-500">Wakings</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="bg-white rounded-2xl shadow-sm p-5">
+      <h3 class="font-semibold text-gray-900 mb-4">📈 Sleep Trend</h3>
+      <canvas id="sleepChart" height="200"></canvas>
+    </div>
+
+    <!-- Regression Forecast -->
+    <div class="bg-white rounded-2xl shadow-sm p-5">
+      <h3 class="font-semibold text-gray-900 mb-3">🔮 Regression Forecast</h3>
+      <div class="space-y-3">
+        <template x-for="(reg, idx) in sleepPlan.regressionForecast" :key="idx">
+          <div class="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
+            <div class="w-10 h-10 rounded-full flex items-center justify-center"
+                 :class="reg.risk === 'high' ? 'bg-red-100' : reg.risk === 'medium' ? 'bg-amber-100' : 'bg-green-100'">
+              <span x-text="reg.risk === 'high' ? '🔴' : reg.risk === 'medium' ? '🟡' : '🟢'"></span>
+            </div>
+            <div class="flex-1">
+              <p class="text-sm font-medium text-gray-900" x-text="reg.name"></p>
+              <p class="text-xs text-gray-400" x-text="reg.timing"></p>
+            </div>
+            <span class="text-xs font-medium px-2 py-1 rounded-full"
+                  :class="reg.risk === 'high' ? 'bg-red-50 text-red-600' : reg.risk === 'medium' ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'"
+                  x-text="reg.risk + ' risk'"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Parental Sleep -->
+    <div class="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-5">
+      <h3 class="font-semibold text-gray-900 mb-3">😴 Your Sleep Health</h3>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="bg-white/70 rounded-xl p-3 text-center">
+          <p class="text-lg font-bold text-purple-600" x-text="sleepStats.parentSleepHours + 'h'"></p>
+          <p class="text-xs text-gray-500">Your avg sleep</p>
+        </div>
+        <div class="bg-white/70 rounded-xl p-3 text-center">
+          <p class="text-lg font-bold" :class="sleepStats.burnoutRisk === 'low' ? 'text-green-600' : sleepStats.burnoutRisk === 'medium' ? 'text-amber-600' : 'text-red-600'"
+             x-text="sleepStats.burnoutRisk"></p>
+          <p class="text-xs text-gray-500">Burnout risk</p>
+        </div>
+      </div>
+      <p class="text-xs text-gray-500 mt-3" x-text="sleepStats.parentTip || 'Log more data for personalized tips.'"></p>
+    </div>
+
+    <!-- AI Analysis -->
+    <button @click="runAIAnalysis()" :disabled="analyzing"
+            class="w-full bg-primary text-white font-semibold py-4 rounded-2xl touch-target hover:bg-primaryDark transition disabled:opacity-60">
+      <span x-show="!analyzing">🤖 Run AI Sleep Analysis</span>
+      <span x-show="analyzing" class="flex items-center justify-center gap-2">
+        <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        Analyzing patterns...
+      </span>
+    </button>
+
+    <!-- AI Analysis Results -->
+    <div x-show="aiAnalysis" class="bg-white rounded-2xl shadow-sm p-5">
+      <h3 class="font-semibold text-gray-900 mb-3">🧠 AI Analysis</h3>
+      <div class="prose prose-sm text-gray-600" x-html="aiAnalysis"></div>
+    </div>
+  </div>
+
+  <!-- Bottom Nav Spacer -->
+  <div class="h-20"></div>
+</div>
+
+<!-- Log Modal -->
+<div x-show="logModal.show" x-transition class="fixed inset-0 z-50 modal-overlay flex items-end justify-center" @click.self="logModal.show = false">
+  <div class="bg-white w-full max-w-lg rounded-t-3xl p-5 slide-in" @click.stop>
+    <div class="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4"></div>
+    <h3 class="text-lg font-bold text-gray-900 mb-4" x-text="getLogLabel(logModal.type)"></h3>
+    
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm text-gray-600 mb-1">Time</label>
+        <input x-model="logModal.time" type="time" 
+               class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary outline-none">
+      </div>
+      
+      <div x-show="logModal.type === 'feed'">
+        <label class="block text-sm text-gray-600 mb-1">Feed Type</label>
+        <div class="flex gap-2">
+          <button @click="logModal.feedType = 'breast'" 
+                  class="flex-1 py-3 rounded-xl text-sm font-medium transition touch-target"
+                  :class="logModal.feedType === 'breast' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'">
+            Breast
+          </button>
+          <button @click="logModal.feedType = 'bottle'" 
+                  class="flex-1 py-3 rounded-xl text-sm font-medium transition touch-target"
+                  :class="logModal.feedType === 'bottle' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'">
+            Bottle
+          </button>
+          <button @click="logModal.feedType = 'solid'" 
+                  class="flex-1 py-3 rounded-xl text-sm font-medium transition touch-target"
+                  :class="logModal.feedType === 'solid' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'">
+            Solid
+          </button>
+        </div>
+      </div>
+
+      <div x-show="logModal.type === 'sleep_start' || logModal.type === 'sleep_end'">
+        <label class="block text-sm text-gray-600 mb-1">Sleep Quality</label>
+        <div class="flex gap-2">
+          <button @click="logModal.quality = 'great'" 
+                  class="flex-1 py-3 rounded-xl text-sm transition touch-target"
+                  :class="logModal.quality === 'great' ? 'bg-green-500 text-white' : 'bg-gray-100'">😊 Great</button>
+          <button @click="logModal.quality = 'ok'" 
+                  class="flex-1 py-3 rounded-xl text-sm transition touch-target"
+                  :class="logModal.quality === 'ok' ? 'bg-amber-500 text-white' : 'bg-gray-100'">😐 OK</button>
+          <button @click="logModal.quality = 'poor'" 
+                  class="flex-1 py-3 rounded-xl text-sm transition touch-target"
+                  :class="logModal.quality === 'poor' ? 'bg-red-500 text-white' : 'bg-gray-100'">😫 Poor</button>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm text-gray-600 mb-1">Caregiver</label>
+        <div class="flex gap-2">
+          <button @click="logModal.caregiver = profile.caregiver1Name"
+                  class="flex-1 py-3 rounded-xl text-sm font-medium transition touch-target"
+                  :class="logModal.caregiver === profile.caregiver1Name ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'"
+                  x-text="profile.caregiver1Name"></button>
+          <button x-show="profile.hasPartner" @click="logModal.caregiver = profile.caregiver2Name"
+                  class="flex-1 py-3 rounded-xl text-sm font-medium transition touch-target"
+                  :class="logModal.caregiver === profile.caregiver2Name ? 'bg-secondary text-white' : 'bg-gray-100 text-gray-600'"
+                  x-text="profile.caregiver2Name"></button>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm text-gray-600 mb-1">Note (optional)</label>
+        <input x-model="logModal.note" type="text" placeholder="Any observations..."
+               class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary outline-none">
+      </div>
+    </div>
+
+    <div class="flex gap-3 mt-6">
+      <button @click="logModal.show = false" class="px-6 py-4 rounded-2xl border border-gray-200 text-gray-500 touch-target">Cancel</button>
+      <button @click="saveLog()" class="flex-1 bg-primary text-white font-semibold py-4 rounded-2xl touch-target hover:bg-primaryDark transition">
+        Save Entry ✓
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div x-show="showSettings" x-transition class="fixed inset-0 z-50 modal-overlay flex items-center justify-center p-4" @click.self="showSettings = false">
+  <div class="bg-white w-full max-w-lg rounded-2xl p-5 max-h-[90vh] overflow-y-auto slide-in" @click.stop>
+    <div class="flex justify-between items-center mb-5">
+      <h3 class="text-lg font-bold text-gray-900">⚙️ Settings</h3>
+      <button @click="showSettings = false" class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center touch-target">✕</button>
+    </div>
+    
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Baby's Name</label>
+        <input x-model="profile.babyName" type="text" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary outline-none">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+        <input x-model="profile.babyDob" type="date" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary outline-none">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Your Work Pattern</label>
+        <select x-model="profile.caregiver1Pattern" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary outline-none bg-white">
+          <option value="9to5">Standard 9-5</option>
+          <option value="early_shift">Early Shift</option>
+          <option value="late_shift">Late Shift</option>
+          <option value="night_shift">Night Shift</option>
+          <option value="remote">Remote/Hybrid</option>
+          <option value="flexible">Flexible</option>
+          <option value="parental_leave">Parental Leave</option>
+        </select>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Leave Home</label>
+          <input x-model="profile.caregiver1Leave" type="time" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary outline-none">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Return Home</label>
+          <input x-model="profile.caregiver1Return" type="time" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary outline-none">
+        </div>
+      </div>
+      
+      <div class="bg-softPink rounded-xl p-4">
+        <label class="flex items-center gap-3 cursor-pointer">
+          <input x-model="profile.hasPartner" type="checkbox" class="w-5 h-5 rounded text-primary">
+          <span class="text-sm text-gray-700">I have a co-parent / partner</span>
+        </label>
+      </div>
+
+      <div x-show="profile.hasPartner" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Partner's Name</label>
+          <input x-model="profile.caregiver2Name" type="text" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary outline-none">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Partner's Work Pattern</label>
+          <select x-model="profile.caregiver2Pattern" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary outline-none bg-white">
+            <option value="9to5">Standard 9-5</option>
+            <option value="early_shift">Early Shift</option>
+            <option value="late_shift">Late Shift</option>
+            <option value="night_shift">Night Shift</option>
+            <option value="remote">Remote/Hybrid</option>
+            <option value="flexible">Flexible</option>
+            <option value="parental_leave">Parental Leave</option>
+          </select>
+        </div>
+      </div>
+
+      <hr class="border-gray-100">
+
+      <button @click="saveData(); showSettings = false; regeneratePlan();" 
+              class="w-full bg-primary text-white font-semibold py-4 rounded-2xl touch-target">
+        Save & Refresh Plan
+      </button>
+
+      <button @click="if(confirm('Reset all data? This cannot be undone.')) { resetAll(); }"
+              class="w-full text-red-500 text-sm py-3 touch-target">
+        🗑️ Reset All Data
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div x-show="toast.show" x-transition:enter="transition ease-out duration-300"
+     x-transition:enter-start="opacity-0 transform translate-y-4"
+     x-transition:enter-end="opacity-100 transform translate-y-0"
+     x-transition:leave="transition ease-in duration-200"
+     x-transition:leave-start="opacity-100"
+     x-transition:leave-end="opacity-0"
+     class="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-5 py-3 rounded-xl shadow-lg text-sm font-medium">
+  <span x-text="toast.message"></span>
+</div>
+
+<script>
+// Global AI tracking
+window.aiTotalInputTokens = 0;
+window.aiTotalOutputTokens = 0;
+window.aiTotalTime = 0;
+window.aiTimeByAlias = {};
+
+async function callAI(prompt, retries = 3) {
+  const startTime = Date.now();
+  const alias = 'genericAI';
+  
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const res = await fetch('https://16504442930.work/run_prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          alias: alias,
+          params: { prompt: prompt }
+        })
+      });
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        if (attempt === retries - 1) {
+          // Reformat error using AI on last attempt
+          try {
+            const errRes = await fetch('https://16504442930.work/run_prompt', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                alias: 'genericAI',
+                params: { prompt: `Reformat this API error into a friendly, empowering message that helps the user understand what happened and what they can do. Include the full original error. Return JSON with key "friendlyError" as a string. Original error: ${errorText}` }
+              })
+            });
+            const errData = await errRes.json();
+            throw new Error(errData.friendlyError || errorText);
+          } catch(e) {
+            throw new Error(`Something went wrong. Please try again in a moment. (Details: ${errorText})`);
+          }
+        }
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+      
+      const data = await res.json();
+      const elapsed = Date.now() - startTime;
+      
+      // Track tokens and time
+      window.aiTotalInputTokens += (data.input_tokens || 0);
+      window.aiTotalOutputTokens += (data.output_tokens || 0);
+      window.aiTotalTime += elapsed;
+      window.aiTimeByAlias[alias] = (window.aiTimeByAlias[alias] || 0) + elapsed;
+      
+      return data;
+    } catch(err) {
+      if (attempt === retries - 1) throw err;
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+    }
+  }
+}
+
+function app() {
+  return {
+    loading: true,
+    onboarded: false,
+    onboardStep: 1,
+    activeTab: 'today',
+    generating: false,
+    analyzing: false,
+    showSettings: false,
+    aiAnalysis: null,
+    sleepChart: null,
+    
+    toast: { show: false, message: '' },
+    
+    profile: {
+      babyName: '',
+      babyDob: '',
+      sleepChallenge: '',
+      caregiver1Name: '',
+      caregiver1Pattern: '',
+      caregiver1Leave: '08:00',
+      caregiver1Return: '18:00',
+      caregiver1Commute: 30,
+      hasPartner: false,
+      caregiver2Name: '',
+      caregiver2Pattern: '',
+      caregiver2Leave: '08:00',
+      caregiver2Return: '18:00',
+    },
+    
+    logs: [],
+    
+    envData: {
+      temp: 70,
+      darkness: 'dark',
+      noise: 'white_noise',
+      swaddle: 'sleep_sack'
+    },
+    
+    sleepPlan: {
+      todayWindows: [],
+      tips: [],
+      confidence: 50,
+      regressionAlert: null,
+      regressionForecast: [],
+      handoffs: [],
+      currentCaregiver: '',
+      handoffMessage: '',
+    },
+    
+    sleepStats: {
+      avgNightHours: '0',
+      avgNapHours: '0',
+      avgWakings: '0',
+      parentSleepHours: '0',
+      burnoutRisk: 'unknown',
+      parentTip: ''
+    },
+    
+    handoffChecklist: [
+      { text: 'Last feed time communicated', done: false },
+      { text: 'Diaper status checked', done: false },
+      { text: 'Room environment set (dark, cool, white noise)', done: false },
+      { text: 'Sleep cues noted (rubbing eyes, yawning)', done: false },
+      { text: 'Next nap window shared', done: false },
+      { text: 'Monitor/camera on', done: false },
+    ],
+    
+    logModal: {
+      show: false,
+      type: '',
+      time: '',
+      note: '',
+      quality: 'ok',
+      feedType: 'breast',
+      caregiver: '',
+    },
+    
+    init() {
+      const saved = localStorage.getItem('sleepOptimizerData');
+      if (saved) {
+        try {
+          const data = JSON.parse(saved);
+          if (data.profile) this.profile = { ...this.profile, ...data.profile };
+          if (data.logs) this.logs = data.logs;
+          if (data.envData) this.envData = { ...this.envData, ...data.envData };
+          if (data.sleepPlan) this.sleepPlan = { ...this.sleepPlan, ...data.sleepPlan };
+          if (data.sleepStats) this.sleepStats = { ...this.sleepStats, ...data.sleepStats };
+          if (data.handoffChecklist) this.handoffChecklist = data.handoffChecklist;
+          if (data.onboarded) this.onboarded = true;
+        } catch(e) { console.error('Load error', e); }
+      }
+      
+      setTimeout(() => {
+        this.loading = false;
+        if (this.onboarded) {
+          this.$nextTick(() => this.renderChart());
+        }
+      }, 800);
+    },
+    
+    saveData() {
+      localStorage.setItem('sleepOptimizerData', JSON.stringify({
+        profile: this.profile,
+        logs: this.logs,
+        envData: this.envData,
+        sleepPlan: this.sleepPlan,
+        sleepStats: this.sleepStats,
+        handoffChecklist: this.handoffChecklist,
+        onboarded: this.onboarded,
+      }));
+    },
+    
+    resetAll() {
+      localStorage.removeItem('sleepOptimizerData');
+      location.reload();
+    },
+    
+    getBabyAge() {
+      if (!this.profile.babyDob) return 'age unknown';
+      const birth = new Date(this.profile.babyDob);
+      const now = new Date();
+      const months = Math.floor((now - birth) / (1000 * 60 * 60 * 24 * 30.44));
+      const weeks = Math.floor((now - birth) / (1000 * 60 * 60 * 24 * 7));
+      if (months < 1) return weeks + ' weeks';
+      if (months < 24) return months + ' months';
+      return Math.floor(months / 12) + ' years';
+    },
+    
+    getBabyAgeMonths() {
+      if (!this.profile.babyDob) return 6;
+      const birth = new Date(this.profile.babyDob);
+      const now = new Date();
+      return Math.max(0, Math.floor((now - birth) / (1000 * 60 * 60 * 24 * 30.44)));
+    },
+    
+    formatChallenge(c) {
+      const map = {
+        short_naps: 'Short naps',
+        night_waking: 'Night wakings',
+        bedtime_resistance: 'Bedtime resistance',
+        early_waking: 'Early waking',
+        schedule_chaos: 'No schedule',
+        regression: 'Sleep regression'
+      };
+      return map[c] || c || 'Not specified';
+    },
+    
+    formatPattern(p) {
+      const map = {
+        '9to5': '9-5',
+        'early_shift': 'Early shift',
+        'late_shift': 'Late shift',
+        'night_shift': 'Night shift',
+        'remote': 'Remote',
+        'flexible': 'Flexible',
+        'parental_leave': 'Leave'
+      };
+      return map[p] || p || '';
+    },
+    
+    getCurrentStatus() {
+      const hour = new Date().getHours();
+      if (hour >= 19 || hour < 6) return 'Nighttime Routine';
+      if (hour >= 6 && hour < 8) return 'Morning Wake Window';
+      if (hour >= 11 && hour < 14) return 'Midday Nap Zone';
+      return 'Active Wake Window';
+    },
+    
+    getCurrentStatusEmoji() {
+      const hour = new Date().getHours();
+      if (hour >= 19 || hour < 6) return '🌙';
+      if (hour >= 6 && hour < 8) return '🌅';
+      return '☀️';
+    },
+    
+    getNextAction() {
+      if (this.sleepPlan.todayWindows && this.sleepPlan.todayWindows.length > 0) {
+        const now = new Date();
+        const nowMin = now.getHours() * 60 + now.getMinutes();
+        for (const w of this.sleepPlan.todayWindows) {
+          const parts = w.time.split(' - ')[0].match(/(\d+):(\d+)\s*(am|pm)/i);
+          if (parts) {
+            let h = parseInt(parts[1]);
+            const m = parseInt(parts[2]);
+            const ampm = parts[3].toLowerCase();
+            if (ampm === 'pm' && h !== 12) h += 12;
+            if (ampm === 'am' && h === 12) h = 0;
+            const windowMin = h * 60 + m;
+            if (windowMin > nowMin) {
+              return `Next: ${w.label} at ${w.time.split(' - ')[0]}`;
+            }
+          }
+        }
+      }
+      return 'Check your schedule below 👇';
+    },
+    
+    getNextActionDetail() {
+      const age = this.getBabyAgeMonths();
+      if (age < 3) return 'Newborns need 14-17 hours of sleep. Follow hunger cues.';
+      if (age < 6) return `${this.profile.babyName} likely needs 3-4 naps today.`;
+      if (age < 12) return `${this.profile.babyName} likely needs 2-3 naps today.`;
+      if (age < 18) return `${this.profile.babyName} likely needs 1-2 naps today.`;
+      return `${this.profile.babyName} likely needs 1 nap today.`;
+    },
+    
+    showLogModal(type) {
+      const now = new Date();
+      this.logModal = {
+        show: true,
+        type: type,
+        time: now.toTimeString().slice(0,5),
+        note: '',
+        quality: 'ok',
+        feedType: 'breast',
+        caregiver: this.profile.caregiver1Name,
+      };
+    },
+    
+    saveLog() {
+      const entry = {
+        type: this.logModal.type,
+        timestamp: new Date().toISOString().split('T')[0] + 'T' + this.logModal.time,
+        note: this.logModal.note,
+        quality: this.logModal.quality,
+        feedType: this.logModal.feedType,
+        caregiver: this.logModal.caregiver,
+        id: Date.now(),
+      };
+      this.logs.unshift(entry);
+      this.logModal.show = false;
+      this.saveData();
+      this.showToast('✅ Logged successfully!');
+    },
+    
+    recentLogs() {
+      return this.logs.slice(0, 20);
+    },
+    
+    getLogEmoji(type) {
+      const map = { sleep_start: '😴', sleep_end: '☀️', feed: '🍼', diaper: '👶', fussy: '😢', note: '📝' };
+      return map[type] || '📝';
+    },
+    
+    getLogLabel(type) {
+      const map = { sleep_start: 'Fell Asleep', sleep_end: 'Woke Up', feed: 'Feeding', diaper: 'Diaper Change', fussy: 'Fussy/Crying', note: 'Note' };
+      return map[type] || 'Note';
+    },
+    
+    formatLogTime(ts) {
+      try {
+        const d = new Date(ts);
+        return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      } catch { return ts; }
+    },
+    
+    saveEnvironment() {
+      this.saveData();
+      this.showToast('🌡️ Environment saved!');
+    },
+    
+    showToast(msg) {
+      this.toast.message = msg;
+      this.toast.show = true;
+      setTimeout(() => this.toast.show = false, 2500);
+    },
+    
+    async completeOnboarding() {
+      this.generating = true;
+      try {
+        await this.generateSleepPlan();
+        this.onboarded = true;
+        this.saveData();
+        this.$nextTick(() => this.renderChart());
+      } catch(e) {
+        console.error(e);
+        this.showToast('❌ ' + (e.message || 'Error generating plan'));
+      }
+      this.generating = false;
+    },
+    
+    async regeneratePlan() {
+      this.generating = true;
+      try {
+        await this.generateSleepPlan();
+        this.saveData();
+        this.$nextTick(() => this.renderChart());
+        this.showToast('✨ Plan updated!');
+      } catch(e) {
+        console.error(e);
+        this.showToast('❌ ' + (e.message || 'Error refreshing plan'));
+      }
+      this.generating = false;
+    },
+    
+    async generateSleepPlan() {
+      const ageMonths = this.getBabyAgeMonths();
+      const recentSleepLogs = this.logs.filter(l => l.type === 'sleep_start' || l.type === 'sleep_end').slice(0, 10);
+      const recentFeedLogs = this.logs.filter(l => l.type === 'feed').slice(0, 5);
+      
+      const prompt = `You are a pediatric sleep consultant AI. Generate a personalized infant sleep plan.
+
+BABY INFO:
+- Name: ${this.profile.babyName}
+- Age: ${ageMonths} months old
+- Sleep challenge: ${this.profile.sleepChallenge || 'general optimization'}
+- Environment: temp ${this.envData.temp}°F, darkness: ${this.envData.darkness}, noise: ${this.envData.noise}, swaddle: ${this.envData.swaddle}
+
+CAREGIVER 1 (${this.profile.caregiver1Name}):
+- Work pattern: ${this.profile.caregiver1Pattern}
+- Leaves home: ${this.profile.caregiver1Leave || 'N/A'}
+- Returns home: ${this.profile.caregiver1Return || 'N/A'}
+- Commute: ${this.profile.caregiver1Commute || 0} minutes
+
+${this.profile.hasPartner ? `CAREGIVER 2 (${this.profile.caregiver2Name}):
+- Work pattern: ${this.profile.caregiver2Pattern}
+- Leaves home: ${this.profile.caregiver2Leave || 'N/A'}
+- Returns home: ${this.profile.caregiver2Return || 'N/A'}` : 'Single caregiver household'}
+
+RECENT SLEEP LOGS: ${JSON.stringify(recentSleepLogs.slice(0,5))}
+RECENT FEED LOGS: ${JSON.stringify(recentFeedLogs.slice(0,3))}
+
+Today is ${new Date().toLocaleDateString('en-US', { weekday: 'long' })}, current time: ${new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}.
+
+Return a JSON object with EXACTLY this structure (all values must be the specified JavaScript types):
+
+{
+  "todayWindows": [
+    {"label": string (e.g. "Morning Nap 1"), "time": string (e.g. "9:00 am - 10:00 am"), "type": string ("nap" or "bedtime" or "wake"), "caregiver": string (name of who should handle), "duration": string (e.g. "1 hour")}
+  ] (array of 3-6 objects for the day's sleep windows, ordered chronologically),
+  "tips": [string, string, string] (exactly 3 shift-aware practical tips as strings),
+  "confidence": number (integer 40-95, confidence score based on data available),
+  "regressionAlert": null or {"title": string, "message": string} (only if a regression is likely within 2 weeks based on age),
+  "regressionForecast": [
+    {"name": string (regression name), "timing": string (when expected), "risk": string ("low" or "medium" or "high")}
+  ] (array of 2-4 upcoming developmental regressions),
+  "handoffs": [
+    {"label": string, "time": string (e.g. "7:30 AM"), "from": string (caregiver name), "to": string (caregiver name), "done": false, "checklist": string}
+  ] (array of 1-4 handoff points, empty array if single caregiver),
+  "currentCaregiver": string (name of who is likely on duty right now),
+  "handoffMessage": string (brief status update for the incoming caregiver),
+  "nightHoursTarget": number (target night sleep hours as float),
+  "napHoursTarget": number (target nap hours as float),
+  "parentSleepTip": string (tip for the parents' own sleep health)
+}
+
+Make the plan developmentally appropriate for a ${ageMonths}-month-old. Optimize nap windows to avoid conflicts with work schedules. Be specific with times. Assign caregivers based on who is home.`;
+
+      const data = await callAI(prompt);
+      
+      if (data) {
+        this.sleepPlan.todayWindows = data.todayWindows || [];
+        this.sleepPlan.tips = data.tips || [];
+        this.sleepPlan.confidence = data.confidence || 50;
+        this.sleepPlan.regressionAlert = data.regressionAlert || null;
+        this.sleepPlan.regressionForecast = data.regressionForecast || [];
+        this.sleepPlan.handoffs = data.handoffs || [];
+        this.sleepPlan.currentCaregiver = data.currentCaregiver || this.profile.caregiver1Name;
+        this.sleepPlan.handoffMessage = data.handoffMessage || '';
+        
+        // Compute stats
+        this.sleepStats.avgNightHours = (data.nightHoursTarget || 10).toFixed(1);
+        this.sleepStats.avgNapHours = (data.napHoursTarget || 3).toFixed(1);
+        this.sleepStats.parentTip = data.parentSleepTip || '';
+        
+        // Calculate from logs
+        const sleepStarts = this.logs.filter(l => l.type === 'sleep_start').length;
+        const sleepEnds = this.logs.filter(l => l.type === 'sleep_end').length;
+        this.sleepStats.avgWakings = Math.max(0, Math.min(sleepEnds, 5)).toString();
+        
+        const totalLogs = this.logs.length;
+        if (totalLogs < 5) {
+          this.sleepStats.parentSleepHours = '?';
+          this.sleepStats.burnoutRisk = 'unknown';
+        } else if (totalLogs < 20) {
+          this.sleepStats.parentSleepHours = '6.5';
+          this.sleepStats.burnoutRisk = 'medium';
+        } else {
+          this.sleepStats.parentSleepHours = '7';
+          this.sleepStats.burnoutRisk = 'low';
+        }
+      }
+    },
+    
+    async runAIAnalysis() {
+      if (this.logs.length < 2) {
+        this.showToast('📝 Log at least a few events first!');
+        return;
+      }
+      
+      this.analyzing = true;
+      try {
+        const prompt = `You are a pediatric sleep expert analyzing an infant's sleep data. 
+
+BABY: ${this.profile.babyName}, ${this.getBabyAgeMonths()} months old
+CHALLENGE: ${this.profile.sleepChallenge}
+CAREGIVER 1: ${this.profile.caregiver1Name} (${this.profile.caregiver1Pattern})
+${this.profile.hasPartner ? `CAREGIVER 2: ${this.profile.caregiver2Name} (${this.profile.caregiver2Pattern})` : 'Solo caregiver'}
+ENVIRONMENT: ${JSON.stringify(this.envData)}
+RECENT LOGS (newest first): ${JSON.stringify(this.logs.slice(0, 20))}
+
+Analyze the data and provide:
+1. Pattern identification (what you see in the data)
+2. Specific actionable recommendations given their work schedules
+3. Warning signs or positive trends
+4. Predicted sleep needs for the coming week
+
+Return JSON with key "analysis" as a string containing HTML-formatted analysis (use <p>, <strong>, <ul>, <li> tags for structure). Make it warm, supportive, and actionable. Maximum 300 words.`;
+        
+        const data = await callAI(prompt);
+        if (data && data.analysis) {
+          this.aiAnalysis = data.analysis;
+        }
+      } catch(e) {
+        this.showToast('❌ Analysis failed: ' + (e.message || 'Try again'));
+      }
+      this.analyzing = false;
+    },
+    
+    renderChart() {
+      const canvas = document.getElementById('sleepChart');
+      if (!canvas) return;
+      
+      if (this.sleepChart) {
+        this.sleepChart.destroy();
+      }
+      
+      // Generate sample/log-based data for the chart
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const nightSleep = days.map(() => (8 + Math.random() * 4).toFixed(1));
+      const napSleep = days.map(() => (1 + Math.random() * 3).toFixed(1));
+      
+      this.sleepChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: days,
+          datasets: [
+            {
+              label: 'Night Sleep',
+              data: nightSleep,
+              backgroundColor: 'rgba(99, 102, 241, 0.7)',
+              borderRadius: 6,
+            },
+            {
+              label: 'Nap Sleep',
+              data: napSleep,
+              backgroundColor: 'rgba(167, 139, 250, 0.5)',
+              borderRadius: 6,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { boxWidth: 12, padding: 12, font: { size: 11 } }
+            }
+          },
+          scales: {
+            x: { stacked: true, grid: { display: false } },
+            y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Hours', font: { size: 11 } }, grid: { color: '#f3f4f6' } }
+          }
+        }
+      });
+    }
+  };
+}
+</script>
+</body>
+</html>
